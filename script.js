@@ -47,7 +47,14 @@ function init() {
 
     document.addEventListener('keydown', (e) => {
         // THIS LOSES DOUBLE ARRAY STRUCTURE WATCH OUT
-        if (e.code === 'KeyS') navigator.clipboard.writeText(gridMap.toString());
+        if (e.code === 'KeyS') {
+            let string = '';
+            for (const row of gridMap) {
+                string += `[${row.toString()}],\n`
+            }
+
+            navigator.clipboard.writeText(string);
+        };
     })
 
     setTimeout(loop, 1000 / 60);
