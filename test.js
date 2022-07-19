@@ -52,7 +52,7 @@ let unit = rect.width;
 let rectCenterX = rect.x + rect.width / 2;
 let rectCenterY = rect.y + rect.height / 2;
 
-let food_checker = new Rect(rectCenterX - 2 * unit, rectCenterY - 4 * unit, unit, unit);
+let food_checker = new Rect(rectCenterX - 2 * unit, rectCenterY - 4 * unit, 6 * unit, unit);
 
 rect.children.push(food_checker);
 
@@ -70,6 +70,25 @@ function init() {
 function round(x, multiple) {
     if (x / multiple - Math.floor(x / multiple) < 0.5) return Math.floor(x / multiple) * multiple;
     else return Math.ceil(x / multiple) * multiple;
+}
+
+function rotateAroundPoint(pivotObj, rotatedObj, angle) {
+    let s = Math.sin(angle);
+    let c = Math.cos(angle);
+
+    let rotatedObjCopy = new Rect(rotatedObj.x, rotatedObj.y, rotatedObj.width, rotatedObj.height);
+    rotatedObjCopy.heading = rotatedObj.heading;
+
+    rotatedObjCopy.x -= pivotObj.x + pivotObj.width / 2;
+    rotatedObjCopy.y -= pivotObj.y + pivotObj.height / 2;
+
+    let xnew = rotatedObjCopy.x * c - rotatedObjCopy.y * s;
+    let ynew = rotatedObjCopy.x * s + rotatedObjCopy.y * c;
+
+    rotatedObjCopy.x = xnew + pivotObj.x + pivotObj.width / 2;
+    rotatedObjCopy.y = ynew + pivotObj.y + pivotObj.height / 2;
+
+    return rotatedObjCopy;
 }
 
 function pixelate(obj) {
@@ -137,23 +156,50 @@ function loop() {
 
     ctx1.fillStyle = 'white';
 
-    for (let i = 0; i < rect.children.length; i++) {
-        let obj = rect.children[i];
-        let pixels = pixelate(obj);
-        for (const pixel of pixels) {
-            ctx1.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
-        }
+    let pixels = pixelate(rect);
+
+    ctx2.fillStyle = 'red';
+
+    for (const pixel of pixels) {
+        ctx2.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
     }
 
-    let pixels = pixelate(new Rect(0, 0, 10, 10, 2));
-    for (const pixel of pixels) {
-        ctx1.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
+    ctx2.fillStyle = 'white';
+
+    let rectCenterX = rect.x + rect.width / 2;
+    let rectCenterY = rect.y + rect.height / 2;
+
+    ctx2.fillRect(rectCenterX, rectCenterY, UNIT_WIDTH, UNIT_WIDTH);
+
+    for (let i = 0; i < rect.children.length; i++) {
+        let obj = rect.children[i];
+
+        // rotate all pixels around rect origin, theta being rect.heading
+        
+        // first rotate the obj coords
+        // set obj heading the same as rect heading
+        obj.heading = rect.heading;
+
+        let newObj = rotateAroundPoint(rect, obj, rect.heading);
+
+        ctx2.fillStyle = 'white'
+
+        let pixels = pixelate(newObj);
+        for (const pixel of pixels) {
+            ctx2.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
+        }
+
+        ctx2.fillStyle = 'blue';
+        ctx2.fillRect(newObj.x, newObj.y, UNIT_WIDTH, UNIT_WIDTH);
     }
-    // pixelated version
+
+    // pixelated version;
+
+    rect.heading += 0.01
     
     if (rect.heading === 180) rect.heading = 0;
 
-    // setTimeout(loop, 1000 / FPS);
+    setTimeout(loop, 1000 / FPS);
 }
 
 init();
