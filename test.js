@@ -79,24 +79,27 @@ function rotateAroundPoint(pivotObj, rotatedObj, angle) {
     let rotatedObjCopy = new Rect(rotatedObj.x, rotatedObj.y, rotatedObj.width, rotatedObj.height);
     rotatedObjCopy.heading = rotatedObj.heading;
 
-    rotatedObjCopy.x -= pivotObj.x + pivotObj.width / 2;
-    rotatedObjCopy.y -= pivotObj.y + pivotObj.height / 2;
+    let offsetX = pivotObj.width / 2;
+    let offsetY = pivotObj.height / 2;
+
+    rotatedObjCopy.x -= pivotObj.x + offsetX;
+    rotatedObjCopy.y -= pivotObj.y + offsetY;
 
     let xnew = rotatedObjCopy.x * c - rotatedObjCopy.y * s;
     let ynew = rotatedObjCopy.x * s + rotatedObjCopy.y * c;
 
-    rotatedObjCopy.x = xnew + pivotObj.x + pivotObj.width / 2;
-    rotatedObjCopy.y = ynew + pivotObj.y + pivotObj.height / 2;
+    rotatedObjCopy.x = xnew + pivotObj.x + offsetX;
+    rotatedObjCopy.y = ynew + pivotObj.y + offsetY;
 
     return rotatedObjCopy;
 }
 
-function pixelate(obj) {
+function pixelate(obj, override=false, center=null) {
     let pixels = []; // stored as FLOATING DIGITS
     let radiusUnit = UNIT_WIDTH;
 
-    let rectCenterX = obj.x + obj.width / 2;
-    let rectCenterY = obj.y + obj.height / 2;
+    let rectCenterX = override ? center[0]: obj.x + obj.width / 2;
+    let rectCenterY = override ? center[1]: obj.y + obj.height / 2;
     
     // now go in two directions: -90 and 90
     let leftAngle = obj.heading + Math.PI / 2;
@@ -106,7 +109,7 @@ function pixelate(obj) {
     let leftAngleFlipped = flippedHeading + Math.PI / 2;
     let rightAngleFlipped = flippedHeading - Math.PI / 2;
 
-    for (let radius = 0; radius < obj.width; radius += radiusUnit) {
+    for (let radius = 0; radius < obj.width / 2; radius += radiusUnit) {
         let newCenter = [rectCenterX + radius * Math.cos(obj.heading), rectCenterY + radius * Math.sin(obj.heading)];
         let newCenterFlipped = [rectCenterX + radius * Math.cos(flippedHeading), rectCenterY + radius * Math.sin(flippedHeading)];
 
@@ -178,19 +181,25 @@ function loop() {
         
         // first rotate the obj coords
         // set obj heading the same as rect heading
+        obj.x += obj.width / 2 - UNIT_WIDTH;
+        obj.y += obj.height / 2 - UNIT_WIDTH;
+
         obj.heading = rect.heading;
 
         let newObj = rotateAroundPoint(rect, obj, rect.heading);
 
-        ctx2.fillStyle = 'white'
+        ctx2.fillStyle = 'white';
 
-        let pixels = pixelate(newObj);
+        let pixels = pixelate(newObj, true, [newObj.x, newObj.y]);
         for (const pixel of pixels) {
             ctx2.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
         }
 
         ctx2.fillStyle = 'blue';
         ctx2.fillRect(newObj.x, newObj.y, UNIT_WIDTH, UNIT_WIDTH);
+
+        obj.x -= obj.width / 2 - UNIT_WIDTH;
+        obj.y -= obj.height / 2 - UNIT_WIDTH;
     }
 
     // pixelated version;
