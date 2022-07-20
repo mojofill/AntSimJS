@@ -52,9 +52,19 @@ let unit = rect.width;
 let rectCenterX = rect.x + rect.width / 2;
 let rectCenterY = rect.y + rect.height / 2;
 
-let food_checker = new Rect(rectCenterX - 2 * unit, rectCenterY - 4 * unit, 6 * unit, unit);
+let foodGrabber = new Rect(rectCenterX - 2 * unit, rectCenterY - unit, 6 * unit, unit);
+let sensorRight = new Rect(rectCenterX + 3 * unit, rectCenterY - 3 * unit, 3 * unit, 3 * unit);
+let sensorLeft = new Rect(rectCenterX - 5 * unit, rectCenterY - 3 * unit, 3 * unit, 3 * unit);
+let sensorForward = new Rect(rectCenterX - unit, rectCenterY - 5 * unit, 3 * unit, 3 * unit); // pos: (-1, -5) width: 3 height: 3
+let collisionDetecter = new Rect(rectCenterX - unit, rectCenterY - 3 * unit, 3 * unit, 2 * unit);
 
-rect.children.push(food_checker);
+rect.children.push(foodGrabber, sensorRight, sensorLeft, sensorForward, collisionDetecter);
+
+rect.foodGrabber = foodGrabber;
+rect.sensorRight = sensorRight;
+rect.sensorForward = sensorForward;
+rect.sensorLeft = sensorLeft;
+rect.collisionDetecter = collisionDetecter;
 
 for (let y = 0; y < Math.ceil(canvas2.height / UNIT_WIDTH); y++) {
     gridMap.push([]);
@@ -113,8 +123,8 @@ function pixelate(obj, override=false, center=null) {
         let newCenter = [rectCenterX + radius * Math.cos(obj.heading), rectCenterY + radius * Math.sin(obj.heading)];
         let newCenterFlipped = [rectCenterX + radius * Math.cos(flippedHeading), rectCenterY + radius * Math.sin(flippedHeading)];
 
-        pixels.push(newCenter)
-        pixels.push(newCenterFlipped)
+        pixels.push(newCenter);
+        pixels.push(newCenterFlipped);
 
         for (let widthRadius = -obj.height / 2; widthRadius <= obj.height / 2; widthRadius += radiusUnit) {
             pixels.push([newCenter[0] + widthRadius * Math.cos(leftAngle), newCenter[1] + widthRadius * Math.sin(leftAngle)]);
@@ -200,6 +210,13 @@ function loop() {
 
         obj.x -= obj.width / 2 - UNIT_WIDTH;
         obj.y -= obj.height / 2 - UNIT_WIDTH;
+    }
+
+    rect.x += 0.1;
+    rect.y += 0.1;
+    for (const child of rect.children) {
+        child.x += 0.1;
+        child.y += 0.1;
     }
 
     // pixelated version;

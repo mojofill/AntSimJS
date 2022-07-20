@@ -18,7 +18,7 @@ const WALL_COLOR = 'white';
 const FOOD_COLOR = 'green';
 const GROUND_COLOR = 'black';
 
-const NUM_ANTS = 100;
+const NUM_ANTS = 1;
 const ANT_STEER_STRENGTH_RANGE = 0.15;
 const ANT_SPEED = 2 * UNIT_WIDTH;
 
@@ -47,12 +47,34 @@ function round(x, multiple) {
     else return Math.ceil(x / multiple) * multiple
 }
 
-function pixelate(obj) { // this is so scuffed tbh 😭😭
+function rotateAroundPoint(pivotObj, rotatedObj, angle) {
+    let s = Math.sin(angle);
+    let c = Math.cos(angle);
+
+    let rotatedObjCopy = new Rect(rotatedObj.x, rotatedObj.y, rotatedObj.width, rotatedObj.height);
+    rotatedObjCopy.heading = rotatedObj.heading;
+
+    let offsetX = pivotObj.width / 2;
+    let offsetY = pivotObj.height / 2;
+
+    rotatedObjCopy.x -= pivotObj.x + offsetX;
+    rotatedObjCopy.y -= pivotObj.y + offsetY;
+
+    let xnew = rotatedObjCopy.x * c - rotatedObjCopy.y * s;
+    let ynew = rotatedObjCopy.x * s + rotatedObjCopy.y * c;
+
+    rotatedObjCopy.x = xnew + pivotObj.x + offsetX;
+    rotatedObjCopy.y = ynew + pivotObj.y + offsetY;
+
+    return rotatedObjCopy;
+}
+
+function pixelate(obj, override=false, center=null) {
     let pixels = []; // stored as FLOATING DIGITS
     let radiusUnit = UNIT_WIDTH;
 
-    let rectCenterX = obj.x + obj.width / 2;
-    let rectCenterY = obj.y + obj.height / 2;
+    let rectCenterX = override ? center[0]: obj.x + obj.width / 2;
+    let rectCenterY = override ? center[1]: obj.y + obj.height / 2;
     
     // now go in two directions: -90 and 90
     let leftAngle = obj.heading + Math.PI / 2;
@@ -62,14 +84,14 @@ function pixelate(obj) { // this is so scuffed tbh 😭😭
     let leftAngleFlipped = flippedHeading + Math.PI / 2;
     let rightAngleFlipped = flippedHeading - Math.PI / 2;
 
-    for (let radius = 0; radius < obj.height / 2; radius += radiusUnit) {
+    for (let radius = 0; radius < obj.width / 2; radius += radiusUnit) {
         let newCenter = [rectCenterX + radius * Math.cos(obj.heading), rectCenterY + radius * Math.sin(obj.heading)];
         let newCenterFlipped = [rectCenterX + radius * Math.cos(flippedHeading), rectCenterY + radius * Math.sin(flippedHeading)];
 
-        pixels.push(newCenter)
-        pixels.push(newCenterFlipped)
+        pixels.push(newCenter);
+        pixels.push(newCenterFlipped);
 
-        for (let widthRadius = -obj.width / 2; widthRadius <= obj.width / 2; widthRadius += radiusUnit) {
+        for (let widthRadius = -obj.height / 2; widthRadius <= obj.height / 2; widthRadius += radiusUnit) {
             pixels.push([newCenter[0] + widthRadius * Math.cos(leftAngle), newCenter[1] + widthRadius * Math.sin(leftAngle)]);
             pixels.push([newCenter[0] + widthRadius * Math.cos(rightAngle), newCenter[1] + widthRadius * Math.sin(rightAngle)]);
 
@@ -97,13 +119,19 @@ class Pheromone {
     }
 }
 
-class Ant {
-    constructor(x=0, y=0, heading=0, speed=UNIT_WIDTH) {
+class Rect {
+    constructor(x, y, width, height, heading) {
         this.x = x;
         this.y = y;
-        this.width = 2.5;
-        this.height = 7.5;
+        this.width = width;
+        this.height = height;
         this.heading = heading;
+    }
+}
+
+class Ant extends Rect {
+    constructor(x=0, y=0, width=2.5, height=7.5, heading=0, speed=UNIT_WIDTH) {
+        super(x, y, width, height, heading)
         this.speed = speed;
         this.pheromones = [];
         this.dropPheromoneType = HOME_PHEROMONE; // default start with HOME_PHEROMONE
@@ -112,10 +140,60 @@ class Ant {
         this.targetFood = null;
         this.hasFood = false;
         this.targetHeading = null;
+        this.children = [];
+
+        let rectCenterX = this.x + this.width / 2;
+        let rectCenterY = this.y + this.height / 2;
+
+        let unit = this.height; // flipped
+
+        this.foodGrabber = new Rect(rectCenterX - 2 * unit, rectCenterY - unit, 6 * unit, unit);
+        this.sensorRight = new Rect(rectCenterX + 3 * unit, rectCenterY - 3 * unit, 3 * unit, 3 * unit);
+        this.sensorLeft = new Rect(rectCenterX - 5 * unit, rectCenterY - 3 * unit, 3 * unit, 3 * unit);
+        this.sensorForward = new Rect(rectCenterX - unit, rectCenterY - 5 * unit, 3 * unit, 3 * unit); // pos: (-1, -5) width: 3 height: 3
+        this.collisionDetecter = new Rect(rectCenterX - unit, rectCenterY - 3 * unit, 3 * unit, 2 * unit);
+
+        this.children.push(this.foodGrabber, this.sensorRight, this.sensorLeft, this.sensorForward, this.collisionDetecter);
     }
 
     sense() {
-        
+        // todo
+    }
+
+    updateChildren() {
+        let rectCenterX = this.x + this.width / 2;
+        let rectCenterY = this.y + this.height / 2;
+
+        for (let i = 0; i < this.children.length; i++) {
+            let obj = this.children[i];
+    
+            // rotate all pixels around rect origin, theta being rect.heading
+            
+            // first rotate the obj coords
+            // set obj heading the same as rect heading
+            obj.x += obj.height / 2 - UNIT_WIDTH;
+            obj.y += obj.width / 2 - UNIT_WIDTH;
+    
+            obj.heading = this.heading;
+    
+            let newObj = rotateAroundPoint(this, obj, this.heading);
+    
+            ctx.fillStyle = 'white';
+    
+            let pixels = pixelate(newObj, true, [newObj.x, newObj.y]);
+            for (const pixel of pixels) {
+                ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
+            }
+    
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(newObj.x, newObj.y, UNIT_WIDTH, UNIT_WIDTH);
+    
+            obj.x -= obj.height / 2 - UNIT_WIDTH;
+            obj.y -= obj.width / 2 - UNIT_WIDTH;
+        }
+
+        ctx.fillStyle = 'green'
+        ctx.fillRect(rectCenterX, rectCenterY, UNIT_WIDTH, UNIT_WIDTH);
     }
 
     grabTargetFood() {
@@ -160,14 +238,8 @@ class Ant {
             let theta = Math.atan2(y_diff, x_diff);
             this.heading = theta;
 
-            let foodGrabSquare = new Ant(this.x + (UNIT_WIDTH - Math.abs(Math.cos(this.heading)) / Math.cos(this.heading) * 6) * Math.cos(this.heading), this.y + (UNIT_WIDTH - Math.abs(Math.sin(this.heading)) / Math.sin(this.heading) * 6) * Math.sin(this.heading), this.heading);
-            foodGrabSquare.width = 15;
-            foodGrabSquare.height = 15;
-
-            let foodGrabPixels = pixelate(foodGrabSquare);
-
             ctx.fillStyle = 'white';
-            for (const pixel of foodGrabPixels) {
+            for (const pixel of this.foodGrabber) {
                 // ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
                 if (this.targetFood !== null) {
                     if (pixel[0] === this.targetFood[0] && pixel[1] === this.targetFood[1]) {
@@ -205,12 +277,8 @@ class Ant {
             ctx.fillStyle = 'white';
             ctx.fillRect(this.targetFood[0], this.targetFood[1], UNIT_WIDTH, UNIT_WIDTH);
         }
-
-        let square = new Ant(this.x + UNIT_WIDTH * Math.cos(this.heading), this.y + UNIT_WIDTH * Math.sin(this.heading), this.heading);
-        square.width = 20;
-        square.height = 20;
         
-        for (const pixel of pixelate(square)) {
+        for (const pixel of pixelate(this.collisionDetecter)) {
             let pixelXFloored = Math.floor(pixel[0] / UNIT_WIDTH);
             let pixelYFloored = Math.floor(pixel[1] / UNIT_WIDTH);
             
@@ -246,6 +314,8 @@ class Ant {
                 break;
             }
         }
+
+        this.updateChildren();
     }
 
     move() {
@@ -301,8 +371,6 @@ fetch("./map.json")
     init();
 })
 
-
-
 function init() {
     canvas.height = HEIGHT;
     canvas.width = WIDTH;
@@ -347,7 +415,7 @@ function locateRender() {
 function spawnAnts() {
     for (let i = 0; i < NUM_ANTS; i++) {
         let index = Math.floor(Math.random() * spawnPixels.length);
-        let ant = new Ant(spawnPixels[index][0] * UNIT_WIDTH, spawnPixels[index][1] * UNIT_WIDTH, -(Math.PI / 4) * (2 * Math.random() - 1), ANT_SPEED);
+        let ant = new Ant(spawnPixels[index][0] * UNIT_WIDTH, spawnPixels[index][1] * UNIT_WIDTH, 7.5, 2.5, -(Math.PI / 4) * (2 * Math.random() - 1), ANT_SPEED);
         ants.push(ant);
     }
 }
