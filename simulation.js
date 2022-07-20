@@ -18,7 +18,7 @@ const WALL_COLOR = 'white';
 const FOOD_COLOR = 'green';
 const GROUND_COLOR = 'black';
 
-const NUM_ANTS = 1;
+const NUM_ANTS = 100;
 const ANT_STEER_STRENGTH_RANGE = 0.15;
 const ANT_SPEED = 2 * UNIT_WIDTH;
 
@@ -44,7 +44,7 @@ let spawnPixels = [];
 
 function round(x, multiple) {
     if (x / multiple - Math.floor(x / multiple) < 0.5) return Math.floor(x / multiple) * multiple;
-    else return Math.ceil(x / multiple) * multiple
+    else return Math.ceil(x / multiple) * multiple;
 }
 
 function rotateAroundPoint(pivotObj, rotatedObj, angle) {
@@ -84,14 +84,14 @@ function pixelate(obj, override=false, center=null) {
     let leftAngleFlipped = flippedHeading + Math.PI / 2;
     let rightAngleFlipped = flippedHeading - Math.PI / 2;
 
-    for (let radius = 0; radius < obj.width / 2; radius += radiusUnit) {
+    for (let radius = 0; radius < obj.height / 2; radius += radiusUnit) {
         let newCenter = [rectCenterX + radius * Math.cos(obj.heading), rectCenterY + radius * Math.sin(obj.heading)];
         let newCenterFlipped = [rectCenterX + radius * Math.cos(flippedHeading), rectCenterY + radius * Math.sin(flippedHeading)];
 
         pixels.push(newCenter);
         pixels.push(newCenterFlipped);
 
-        for (let widthRadius = -obj.height / 2; widthRadius <= obj.height / 2; widthRadius += radiusUnit) {
+        for (let widthRadius = -obj.width / 2; widthRadius <= obj.width / 2; widthRadius += radiusUnit) {
             pixels.push([newCenter[0] + widthRadius * Math.cos(leftAngle), newCenter[1] + widthRadius * Math.sin(leftAngle)]);
             pixels.push([newCenter[0] + widthRadius * Math.cos(rightAngle), newCenter[1] + widthRadius * Math.sin(rightAngle)]);
 
@@ -110,6 +110,10 @@ function pixelate(obj, override=false, center=null) {
     return flooredPixels;
 }
 
+function pixelateChild(obj) {
+    return pixelate(obj, true, [obj.x, obj.y]);
+}
+
 class Pheromone {
     constructor(x, y, type) {
         this.x = x;
@@ -120,7 +124,7 @@ class Pheromone {
 }
 
 class Rect {
-    constructor(x, y, width, height, heading) {
+    constructor(x, y, width, height, heading=0) {
         this.x = x;
         this.y = y;
         this.width = width;
@@ -141,19 +145,27 @@ class Ant extends Rect {
         this.hasFood = false;
         this.targetHeading = null;
         this.children = [];
+        this.nonRotatedChildren = [];
 
         let rectCenterX = this.x + this.width / 2;
         let rectCenterY = this.y + this.height / 2;
 
-        let unit = this.height; // flipped
+        let unit = this.width;
 
-        this.foodGrabber = new Rect(rectCenterX - 2 * unit, rectCenterY - unit, 6 * unit, unit);
+        this.foodGrabber = new Rect(rectCenterX - 2 * unit, rectCenterY - 3 * unit, 6 * unit, 4 * unit);
         this.sensorRight = new Rect(rectCenterX + 3 * unit, rectCenterY - 3 * unit, 3 * unit, 3 * unit);
         this.sensorLeft = new Rect(rectCenterX - 5 * unit, rectCenterY - 3 * unit, 3 * unit, 3 * unit);
         this.sensorForward = new Rect(rectCenterX - unit, rectCenterY - 5 * unit, 3 * unit, 3 * unit); // pos: (-1, -5) width: 3 height: 3
         this.collisionDetecter = new Rect(rectCenterX - unit, rectCenterY - 3 * unit, 3 * unit, 2 * unit);
 
+        this.foodGrabberNonRotate = structuredClone(this.foodGrabber);
+        this.sensorRightNonRotate = structuredClone(this.sensorRight);
+        this.sensorForwardNonRotate = structuredClone(this.sensorForward);
+        this.sensorLeftNonRotate = structuredClone(this.sensorLeft);
+        this.collisionDetecterNonRotate = structuredClone(this.collisionDetecter);
+
         this.children.push(this.foodGrabber, this.sensorRight, this.sensorLeft, this.sensorForward, this.collisionDetecter);
+        this.nonRotatedChildren.push(this.foodGrabberNonRotate, this.sensorRightNonRotate, this.sensorLeftNonRotate, this.sensorForwardNonRotate, this.collisionDetecterNonRotate);
     }
 
     sense() {
@@ -161,42 +173,44 @@ class Ant extends Rect {
     }
 
     updateChildren() {
-        let rectCenterX = this.x + this.width / 2;
-        let rectCenterY = this.y + this.height / 2;
-
         for (let i = 0; i < this.children.length; i++) {
-            let obj = this.children[i];
+            let obj = this.nonRotatedChildren[i];
     
             // rotate all pixels around rect origin, theta being rect.heading
             
             // first rotate the obj coords
             // set obj heading the same as rect heading
-            obj.x += obj.height / 2 - UNIT_WIDTH;
-            obj.y += obj.width / 2 - UNIT_WIDTH;
+            obj.x += obj.width / 2 - UNIT_WIDTH;
+            obj.y += obj.height / 2 - UNIT_WIDTH;
     
             obj.heading = this.heading;
     
-            let newObj = rotateAroundPoint(this, obj, this.heading);
+            let newObj = rotateAroundPoint(this, obj, this.heading + Math.PI / 2); // this is the rotated version of the child
+            // this.children[i] = newObj;
+            // this should change the child object thats rotated as well
+            this.children[i].heading = newObj.heading;
+            this.children[i].height = newObj.height;
+            this.children[i].width = newObj.width;
+            this.children[i].x = newObj.x;
+            this.children[i].y = newObj.y;
+            
+            // ctx.fillStyle = 'white';
     
-            ctx.fillStyle = 'white';
+            // let pixels = pixelate(newObj, true, [newObj.x, newObj.y]);
+            // for (const pixel of pixels) {
+            //     ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
+            // }
     
-            let pixels = pixelate(newObj, true, [newObj.x, newObj.y]);
-            for (const pixel of pixels) {
-                ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
-            }
+            // ctx.fillStyle = 'blue';
+            // ctx.fillRect(newObj.x, newObj.y, UNIT_WIDTH, UNIT_WIDTH);
     
-            ctx.fillStyle = 'blue';
-            ctx.fillRect(newObj.x, newObj.y, UNIT_WIDTH, UNIT_WIDTH);
-    
-            obj.x -= obj.height / 2 - UNIT_WIDTH;
-            obj.y -= obj.width / 2 - UNIT_WIDTH;
+            obj.x -= obj.width / 2 - UNIT_WIDTH;
+            obj.y -= obj.height / 2 - UNIT_WIDTH;
 
+            // this changes the base, non rotated versions of the children
             obj.x += this.speed * Math.cos(this.heading);
             obj.y += this.speed * Math.sin(this.heading);
         }
-
-        ctx.fillStyle = 'green'
-        ctx.fillRect(rectCenterX, rectCenterY, UNIT_WIDTH, UNIT_WIDTH);
     }
 
     grabTargetFood() {
@@ -241,9 +255,7 @@ class Ant extends Rect {
             let theta = Math.atan2(y_diff, x_diff);
             this.heading = theta;
 
-            ctx.fillStyle = 'white';
-            for (const pixel of this.foodGrabber) {
-                // ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
+            for (const pixel of pixelateChild(this.foodGrabber)) {
                 if (this.targetFood !== null) {
                     if (pixel[0] === this.targetFood[0] && pixel[1] === this.targetFood[1]) {
                         this.grabTargetFood();
@@ -260,6 +272,11 @@ class Ant extends Rect {
                     this.grabTargetFood();
                 }
             }
+        }
+
+        ctx.fillStyle = 'white';
+        for (const pixel of pixelateChild(this.foodGrabber)) {
+            ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
         }
 
         let flooredPixels = pixelate(this);
@@ -280,8 +297,8 @@ class Ant extends Rect {
             ctx.fillStyle = 'white';
             ctx.fillRect(this.targetFood[0], this.targetFood[1], UNIT_WIDTH, UNIT_WIDTH);
         }
-        
-        for (const pixel of pixelate(this.collisionDetecter)) {
+        ctx.fillStyle = 'white';
+        for (const pixel of pixelateChild(this.collisionDetecter)) {
             let pixelXFloored = Math.floor(pixel[0] / UNIT_WIDTH);
             let pixelYFloored = Math.floor(pixel[1] / UNIT_WIDTH);
             
@@ -290,7 +307,7 @@ class Ant extends Rect {
             try {
                 value = gridMap[pixelYFloored][pixelXFloored];
             }
-            catch {
+            catch { // index error - outside to the wall
                 value = WALL;
             }
             if (value !== WALL) {
@@ -418,7 +435,7 @@ function locateRender() {
 function spawnAnts() {
     for (let i = 0; i < NUM_ANTS; i++) {
         let index = Math.floor(Math.random() * spawnPixels.length);
-        let ant = new Ant(spawnPixels[index][0] * UNIT_WIDTH, spawnPixels[index][1] * UNIT_WIDTH, 7.5, 2.5, -(Math.PI / 4) * (2 * Math.random() - 1), ANT_SPEED);
+        let ant = new Ant(spawnPixels[index][0] * UNIT_WIDTH, spawnPixels[index][1] * UNIT_WIDTH, 2.5, 7.5, -(Math.PI / 4) * (2 * Math.random() - 1), ANT_SPEED);
         ants.push(ant);
     }
 }
