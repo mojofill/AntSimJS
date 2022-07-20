@@ -190,6 +190,9 @@ class Ant extends Rect {
     
             obj.x -= obj.height / 2 - UNIT_WIDTH;
             obj.y -= obj.width / 2 - UNIT_WIDTH;
+
+            obj.x += this.speed * Math.cos(this.heading);
+            obj.y += this.speed * Math.sin(this.heading);
         }
 
         ctx.fillStyle = 'green'
