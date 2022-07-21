@@ -18,7 +18,7 @@ const WALL_COLOR = 'white';
 const FOOD_COLOR = 'green';
 const GROUND_COLOR = 'black';
 
-const NUM_ANTS = 100;
+const NUM_ANTS = 500;
 const ANT_STEER_STRENGTH_RANGE = 0.15;
 const TURN_FORCE = 0.15;
 const ANT_SPEED = 2 * UNIT_WIDTH;
@@ -151,6 +151,8 @@ class Ant extends Rect {
         this.children = [];
         this.nonRotatedChildren = [];
 
+        this.targetSpawn = [];
+
         let rectCenterX = this.x + this.width / 2;
         let rectCenterY = this.y + this.height / 2;
 
@@ -273,6 +275,7 @@ class Ant extends Rect {
     }
 
     depositFood() {
+        if (!this.hasFood) return;
         foodAtSpawnCount++;
         this.setDropPheromoneType(HOME_PHEROMONE);
         this.setTargetPheromoneType(FOOD_PHEROMONE);
@@ -320,7 +323,17 @@ class Ant extends Rect {
         for (const pixel of flooredPixels) {
             if (this.targetFood !== null) {
                 if (pixel[0] === this.targetFood[0] && pixel[1] === this.targetFood[1]) this.grabTargetFood();
-                else if (gridMap[pixel[1]][pixel[0]] === ANT_SPAWN && this.hasFood) this.depositFood();
+                else if (gridMap[pixel[1]][pixel[0]] === ANT_SPAWN && this.hasFood) {
+                    this.depositFood();
+                    break;
+                }
+            }
+
+            if (this.targetSpawn !== null) {
+                if (pixel[0] === this.targetSpawn[0] && pixel[1] === this.targetSpawn[1]) {
+                    this.depositFood();
+                    this.targetSpawn = null;
+                }
             }
 
             ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
@@ -331,6 +344,7 @@ class Ant extends Rect {
                 if (this.targetFood !== null) {
                     if (pixel[0] === this.targetFood[0] && pixel[1] === this.targetFood[1]) {
                         this.grabTargetFood();
+                        break;
                     }
                 }
             }
@@ -500,7 +514,7 @@ function locateRender() {
 function spawnAnts() {
     for (let i = 0; i < NUM_ANTS; i++) {
         let index = Math.floor(Math.random() * spawnPixels.length);
-        let ant = new Ant(spawnPixels[index][0] * UNIT_WIDTH, spawnPixels[index][1] * UNIT_WIDTH, 2.5, 7.5, -(Math.PI / 4) * (2 * Math.random() - 1), ANT_SPEED);
+        let ant = new Ant(spawnPixels[index][0] * UNIT_WIDTH, spawnPixels[index][1] * UNIT_WIDTH, 2.5, 7.5, Math.random() * 2 * Math.PI, ANT_SPEED);
         ants.push(ant);
     }
 }
@@ -599,11 +613,17 @@ function nextSimulationStep() {
         }
         
         if (ant.hasFood) {
-            for (const pixel of pixelateChild(ant.spawnCollider)) {
-                try {
-                    if (gridMap[pixel[1]][pixel[0]] === ANT_SPAWN) ant.depositFood();
+            if (ant.targetSpawn === null) {
+                for (const pixel of pixelateChild(ant.spawnCollider)) {
+                    try {
+                        if (gridMap[pixel[1]][pixel[0]] === ANT_SPAWN) {
+                            ant.rotateToPoint(pixel);
+                            ant.targetSpawn = pixel;
+                            break;
+                        }
+                    }
+                    catch {}
                 }
-                catch {}
             }
         }
     }
