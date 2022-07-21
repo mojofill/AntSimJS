@@ -20,6 +20,7 @@ const GROUND_COLOR = 'black';
 
 const NUM_ANTS = 100;
 const ANT_STEER_STRENGTH_RANGE = 0.15;
+const TURN_FORCE = 0.15;
 const ANT_SPEED = 2 * UNIT_WIDTH;
 
 const HOME_PHEROMONE = 0;
@@ -36,7 +37,8 @@ const FPS = 60;
 let gridMap; // this is the pixel map
 let ants = [];
 
-let pheromoneMap = [];
+let homePheromoneMap = [];
+let foodPheromoneMap = [];
 
 let foodPixels = [];
 let wallPixels = [];
@@ -137,7 +139,8 @@ class Ant extends Rect {
     constructor(x=0, y=0, width=2.5, height=7.5, heading=0, speed=UNIT_WIDTH) {
         super(x, y, width, height, heading)
         this.speed = speed;
-        this.pheromones = [];
+        this.homePheromones = [];
+        this.foodPheromones = [];
         this.dropPheromoneType = HOME_PHEROMONE; // default start with HOME_PHEROMONE
         this.targetPheromoneType = FOOD_PHEROMONE; // default start with FOOD_PHEROMONE
         this.changeDirection = Math.random() * 2 - 1 >= 0 ? 1 : -1;
@@ -152,7 +155,7 @@ class Ant extends Rect {
 
         let unit = this.width;
 
-        this.foodGrabber = new Rect(rectCenterX - 2 * unit, rectCenterY - 3 * unit, 6 * unit, 4 * unit);
+        this.foodGrabber = new Rect(rectCenterX - 3 * unit, rectCenterY - 4 * unit, 8 * unit, 5 * unit);
         this.sensorRight = new Rect(rectCenterX + 3 * unit, rectCenterY - 3 * unit, 3 * unit, 3 * unit);
         this.sensorLeft = new Rect(rectCenterX - 5 * unit, rectCenterY - 3 * unit, 3 * unit, 3 * unit);
         this.sensorForward = new Rect(rectCenterX - unit, rectCenterY - 5 * unit, 3 * unit, 3 * unit); // pos: (-1, -5) width: 3 height: 3
@@ -168,8 +171,43 @@ class Ant extends Rect {
         this.nonRotatedChildren.push(this.foodGrabberNonRotate, this.sensorRightNonRotate, this.sensorLeftNonRotate, this.sensorForwardNonRotate, this.collisionDetecterNonRotate);
     }
 
-    sense() {
-        // todo
+    sense(type) {
+        let rightSum = 0;
+        let leftSum = 0;
+        let forwardSum = 0;
+
+        let map = type === HOME_PHEROMONE ? homePheromoneMap : foodPheromoneMap;
+        
+        // ctx.fillStyle = 'white';
+        try {
+            for (const pixel of pixelateChild(this.sensorRight)) {
+                // ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
+                rightSum += map[pixel[1]][pixel[0]];
+            }
+        }
+        catch {}
+
+        try {
+            for (const pixel of pixelateChild(this.sensorLeft)) {
+                // ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
+                leftSum += map[pixel[1]][pixel[0]];
+            }
+        }
+        catch {}
+
+        try {
+            for (const pixel of pixelateChild(this.sensorForward)) {
+                // ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
+                forwardSum += map[pixel[1]][pixel[0]];
+            }
+        }
+        catch {}
+
+        return {
+            right: rightSum,
+            left: leftSum,
+            forward: forwardSum
+        }
     }
 
     updateChildren() {
@@ -255,14 +293,6 @@ class Ant extends Rect {
             let theta = Math.atan2(y_diff, x_diff);
             this.heading = theta;
 
-            for (const pixel of pixelateChild(this.foodGrabber)) {
-                if (this.targetFood !== null) {
-                    if (pixel[0] === this.targetFood[0] && pixel[1] === this.targetFood[1]) {
-                        this.grabTargetFood();
-                    }
-                }
-            }
-
             if (this.targetFood !== null) {
                 // whatever bro if the food is super close lets just say it grabbed it
                 let centerX = this.x + this.width / 2;
@@ -272,11 +302,6 @@ class Ant extends Rect {
                     this.grabTargetFood();
                 }
             }
-        }
-
-        ctx.fillStyle = 'white';
-        for (const pixel of pixelateChild(this.foodGrabber)) {
-            ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
         }
 
         let flooredPixels = pixelate(this);
@@ -293,9 +318,21 @@ class Ant extends Rect {
             ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
         }
 
+        // ctx.fillStyle = 'white'
+        // for (const pixel of pixelateChild(this.foodGrabber)) {
+        //     ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
+        // }
+
         if (this.targetFood !== null) {
+            for (const pixel of pixelateChild(this.foodGrabber)) {
+                if (this.targetFood !== null) {
+                    if (pixel[0] === this.targetFood[0] && pixel[1] === this.targetFood[1]) {
+                        this.grabTargetFood();
+                    }
+                }
+            }
             ctx.fillStyle = 'white';
-            ctx.fillRect(this.targetFood[0], this.targetFood[1], UNIT_WIDTH, UNIT_WIDTH);
+            if (this.targetFood !== null) ctx.fillRect(this.targetFood[0], this.targetFood[1], UNIT_WIDTH, UNIT_WIDTH);
         }
         ctx.fillStyle = 'white';
         for (const pixel of pixelateChild(this.collisionDetecter)) {
@@ -363,12 +400,19 @@ class Ant extends Rect {
     dropPheromone() {
         let pheromoneY = Math.floor((this.y + this.height) / UNIT_WIDTH);
         let pheromoneX = Math.floor((this.x + this.width / 2) / UNIT_WIDTH)
-        if (gridMap[pheromoneY][pheromoneX] === GROUND) {
-            pheromoneX += Math.floor(Math.cos(this.heading + Math.PI));
-            let pheromone = new Pheromone(pheromoneX, pheromoneY, this.dropPheromoneType);
-            pheromoneMap[pheromoneY][pheromoneX] += pheromone.value;
-            this.pheromones.push(pheromone);
-        }
+        
+        pheromoneX += Math.floor(Math.cos(this.heading + Math.PI));
+        pheromoneY += Math.floor(Math.sin(this.heading + Math.PI));
+
+        let map = this.dropPheromoneType === HOME_PHEROMONE ? homePheromoneMap : foodPheromoneMap;
+
+        let pheromoneArr = this.dropPheromoneType === HOME_PHEROMONE ? this.homePheromones : this.foodPheromones;
+        
+        let pheromone = new Pheromone(pheromoneX, pheromoneY, this.dropPheromoneType);
+
+        map[pheromoneY][pheromoneX] += pheromone.value;
+
+        pheromoneArr.push(pheromone);
     }
 
     get randomSteerStrength() {
@@ -382,9 +426,11 @@ fetch("./map.json")
     gridMap = json.map;
     
     for (let y = 0; y < gridMap.length; y++) {
-        pheromoneMap.push([]);
+        homePheromoneMap.push([]);
+        foodPheromoneMap.push([]);
         for (let x = 0; x < gridMap[y].length; x++) {
-            pheromoneMap[y].push(0);
+            homePheromoneMap[y].push(0);
+            foodPheromoneMap[y].push(0);
         }
     }
 
@@ -461,23 +507,46 @@ function render() {
     }
 
     for (const ant of ants) {
-        for (let i = 0; i < ant.pheromones.length; i++) {
-            let pheromone = ant.pheromones[i];
+        // home pheromones first
+        for (let i = 0; i < ant.homePheromones.length; i++) {
+            let pheromone = ant.homePheromones[i];
             if (pheromone.value <= 0) {
-                ant.pheromones.splice(i, 1);
+                ant.homePheromones.splice(i, 1);
             }
             else {
                 let pheromoneX = Math.floor(pheromone.x * UNIT_WIDTH);
                 let pheromoneY = Math.floor(pheromone.y * UNIT_WIDTH);
+                if (gridMap[pheromoneY][pheromoneX] !== GROUND) continue;
 
-                ctx.fillStyle = pheromone.type === HOME_PHEROMONE ? `rgba(0, 0, 255, ${pheromone.value})` : `rgba(255, 0, 0, ${pheromone.value})`;
+                ctx.fillStyle = `rgba(0, 0, 255, ${pheromone.value})`;
                 ctx.fillRect(pheromone.x * UNIT_WIDTH, pheromone.y * UNIT_WIDTH, UNIT_WIDTH, UNIT_WIDTH);
 
                 pheromone.value -= PHEROMONE_EVAPORATE_STRENGTH;
-                pheromoneMap[pheromoneY][pheromoneX] -= PHEROMONE_EVAPORATE_STRENGTH;
-                if (pheromoneMap[pheromoneY][pheromoneX] < 0) pheromoneMap[pheromoneY][pheromoneX] = 0;
+                homePheromoneMap[pheromoneY][pheromoneX] -= PHEROMONE_EVAPORATE_STRENGTH;
+                if (homePheromoneMap[pheromoneY][pheromoneX] <= 0) homePheromoneMap[pheromoneY][pheromoneX] = 0;
             }
         }
+
+        // food pheromones second
+        for (let i = 0; i < ant.foodPheromones.length; i++) {
+            let pheromone = ant.foodPheromones[i];
+            if (pheromone.value <= 0) {
+                ant.foodPheromones.splice(i, 1);
+            }
+            else {
+                let pheromoneX = Math.floor(pheromone.x * UNIT_WIDTH);
+                let pheromoneY = Math.floor(pheromone.y * UNIT_WIDTH);
+                if (gridMap[pheromoneY][pheromoneX] !== GROUND) continue;
+
+                ctx.fillStyle = `rgba(255, 0, 0, ${pheromone.value})`;
+                ctx.fillRect(pheromone.x * UNIT_WIDTH, pheromone.y * UNIT_WIDTH, UNIT_WIDTH, UNIT_WIDTH);
+
+                pheromone.value -= PHEROMONE_EVAPORATE_STRENGTH;
+                foodPheromoneMap[pheromoneY][pheromoneX] -= PHEROMONE_EVAPORATE_STRENGTH;
+                if (foodPheromoneMap[pheromoneY][pheromoneX] <= 0) foodPheromoneMap[pheromoneY][pheromoneX] = 0;
+            }
+        }
+
         ant.render();
     }
 
@@ -490,6 +559,25 @@ function nextSimulationStep() {
     for (const ant of ants) {
         ant.dropPheromone();
         ant.move();
+
+        let samples = ant.sense(ant.targetPheromoneType);
+        if ((samples.forward > samples.left) && (samples.forward > samples.right)) {
+            continue;
+        }
+        else if ((samples.forward < samples.left) && (samples.left < samples.right)) {
+            // turn randomly, which is taken care by .move()
+            continue;
+        }
+        else if (samples.left < samples.right) {
+            ant.heading += TURN_FORCE;
+        }
+        else if (samples.right < samples.left) {
+            ant.heading -= TURN_FORCE;
+        }
+        else {
+            // face forward
+            continue;
+        }
     }
 }
 
