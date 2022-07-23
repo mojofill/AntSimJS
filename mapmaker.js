@@ -5,7 +5,7 @@ export default function mapMakerInit() {
     const HEIGHT = document.body.clientHeight;
     const WIDTH = document.body.clientWidth;
 
-    const UNIT_WIDTH = 2;
+    const UNIT_WIDTH = 1;
 
     canvas.height = HEIGHT;
     canvas.width = WIDTH;
