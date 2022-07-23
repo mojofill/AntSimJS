@@ -26,7 +26,7 @@ const ANT_SPEED = 2 * UNIT_WIDTH;
 const HOME_PHEROMONE = 0;
 const FOOD_PHEROMONE = 1;
 
-const PHEROMONE_EVAPORATE_STRENGTH = 0.0025;
+const PHEROMONE_EVAPORATE_STRENGTH = 0.005;
 
 let ANT_SPAWN_COORD = [];
 
@@ -585,7 +585,7 @@ function render() {
 
     ctx.fillStyle = 'white';
     ctx.font = '24px comic-sans';
-    ctx.fillText('' + foodAtSpawnCount, ANT_SPAWN_COORD[0] - 3, ANT_SPAWN_COORD[1] + 5);
+    ctx.fillText('' + foodAtSpawnCount, ANT_SPAWN_COORD[0] - 16, ANT_SPAWN_COORD[1] + 7);
 }
 
 function nextSimulationStep() {

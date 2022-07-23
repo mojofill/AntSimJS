@@ -5,7 +5,7 @@ export default function mapMakerInit() {
     const HEIGHT = document.body.clientHeight;
     const WIDTH = document.body.clientWidth;
 
-    const UNIT_WIDTH = 2;
+    const UNIT_WIDTH = 1;
 
     canvas.height = HEIGHT;
     canvas.width = WIDTH;
@@ -93,7 +93,7 @@ export default function mapMakerInit() {
                     break;
                 
                 case "KeyW":
-                    brush.type = WALL_COLOR;
+                    brush.type = WALL;
                     break;
                 
                 case "Backspace":
@@ -122,7 +122,7 @@ export default function mapMakerInit() {
 
     function reset() {
         ctx.clearRect(0, 0, WIDTH, HEIGHT);
-        ctx.fillStyle = 'black';
+        ctx.fillStyle = GROUND_COLOR;
         ctx.fillRect(0, 0, WIDTH, HEIGHT);
     }
 
@@ -142,7 +142,7 @@ export default function mapMakerInit() {
                     }
                 }
             }
-            else ctx.fillStyle = GROUND;
+            else ctx.fillStyle = GROUND_COLOR;
         }
 
         for (let y = 0; y < gridMap.length; y++) {
@@ -159,6 +159,8 @@ export default function mapMakerInit() {
                     }
                 }
                 else {
+                    if (Math.abs(x - clampedX) <= brush.size && Math.abs(y - clampedY) <= brush.size) continue;
+
                     switch (gridMap[y][x]) {
                         case WALL:
                             ctx.fillStyle = WALL_COLOR;
