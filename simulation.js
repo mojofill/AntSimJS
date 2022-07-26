@@ -25,14 +25,20 @@ const ANT_SPEED = 2 * UNIT_WIDTH;
 
 const HOME_PHEROMONE = 0;
 const FOOD_PHEROMONE = 1;
+const DEAD = 2;
 
 const PHEROMONE_EVAPORATE_STRENGTH = 0.005;
 
 const ANT_TIMER_SECONDS = 60; // seconds
+const FOOD_TO_CREATE_ANT = 10;
 
 let ANT_SPAWN_COORD = [];
 
 let foodAtSpawnCount = 0;
+
+let homePheromonesToTrackFromDeadAnts = [];
+let foodPheromonesToTrackFromDeadAnts = [];
+let deadPheromones = [];
 
 const FPS = 60;
 
@@ -41,6 +47,7 @@ let ants = [];
 
 let homePheromoneMap = [];
 let foodPheromoneMap = [];
+let deadAntMap = [];
 
 let foodPixels = [];
 let wallPixels = [];
@@ -168,7 +175,7 @@ class Ant extends Rect {
 
         this.targetSpawn = [];
 
-        this.timer = 0;
+        this.time = new Date().getTime();
 
         let rectCenterX = this.x + this.width / 2;
         let rectCenterY = this.y + this.height / 2;
@@ -211,6 +218,10 @@ class Ant extends Rect {
         let leftSum = 0;
         let forwardSum = 0;
 
+        let deadRightSum = 0;
+        let deadLeftSum = 0;
+        let deadForwardSum = 0;
+
         let map = type === HOME_PHEROMONE ? homePheromoneMap : foodPheromoneMap;
         
         // ctx.fillStyle = 'white';
@@ -218,6 +229,7 @@ class Ant extends Rect {
             for (const pixel of pixelateChild(this.sensorRight)) {
                 // ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
                 rightSum += map[pixel[1]][pixel[0]];
+                deadRightSum += deadAntMap[pixel[1]][pixel[0]];
             }
         }
         catch {}
@@ -226,6 +238,7 @@ class Ant extends Rect {
             for (const pixel of pixelateChild(this.sensorLeft)) {
                 // ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
                 leftSum += map[pixel[1]][pixel[0]];
+                deadLeftSum += deadAntMap[pixel[1]][pixel[0]];
             }
         }
         catch {}
@@ -234,6 +247,7 @@ class Ant extends Rect {
             for (const pixel of pixelateChild(this.sensorForward)) {
                 // ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
                 forwardSum += map[pixel[1]][pixel[0]];
+                deadForwardSum += deadAntMap[pixel[1]][pixel[0]];
             }
         }
         catch {}
@@ -241,7 +255,10 @@ class Ant extends Rect {
         return {
             right: rightSum,
             left: leftSum,
-            forward: forwardSum
+            forward: forwardSum,
+            deadRight: deadRightSum,
+            deadLeft: deadLeftSum,
+            deadForward: deadForwardSum
         }
     }
 
@@ -266,16 +283,6 @@ class Ant extends Rect {
             this.children[i].width = newObj.width;
             this.children[i].x = newObj.x;
             this.children[i].y = newObj.y;
-            
-            // ctx.fillStyle = 'white';
-    
-            // let pixels = pixelate(newObj, true, [newObj.x, newObj.y]);
-            // for (const pixel of pixels) {
-            //     ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
-            // }
-    
-            // ctx.fillStyle = 'blue';
-            // ctx.fillRect(newObj.x, newObj.y, UNIT_WIDTH, UNIT_WIDTH);
     
             obj.x -= obj.width / 2 - UNIT_WIDTH;
             obj.y -= obj.height / 2 - UNIT_WIDTH;
@@ -332,17 +339,23 @@ class Ant extends Rect {
 
     render() {
         if (this.targetFood !== null) {
-            // use atan2 to get theta
+            if (gridMap[this.targetFood[1]][this.targetFood[0]] !== FOOD) {
+                // some other ant grabbed it before this ant
+                this.targetFood = null;
+            }
+            else {
+                // use atan2 to get theta
 
-            this.rotateToPoint(this.targetFood);
+                this.rotateToPoint(this.targetFood);
 
-            if (this.targetFood !== null) {
-                // whatever bro if the food is super close lets just say it grabbed it
-                let centerX = this.x + this.width / 2;
-                let centerY = this.y + this.height / 2;
+                if (this.targetFood !== null) {
+                    // whatever bro if the food is super close lets just say it grabbed it
+                    let centerX = this.x + this.width / 2;
+                    let centerY = this.y + this.height / 2;
 
-                if (Math.sqrt((this.targetFood[0] - centerX) * (this.targetFood[0] - centerX) + (this.targetFood[1] - centerY) * (this.targetFood[1] - centerY)) <= 3 * UNIT_WIDTH) {
-                    this.grabTargetFood();
+                    if (Math.sqrt((this.targetFood[0] - centerX) * (this.targetFood[0] - centerX) + (this.targetFood[1] - centerY) * (this.targetFood[1] - centerY)) <= 3 * UNIT_WIDTH) {
+                        this.grabTargetFood();
+                    }
                 }
             }
         }
@@ -352,22 +365,27 @@ class Ant extends Rect {
         ctx.fillStyle = 'red';
 
         for (const pixel of flooredPixels) {
+            let action = false;
             if (this.targetFood !== null) {
-                if (pixel[0] === this.targetFood[0] && pixel[1] === this.targetFood[1]) this.grabTargetFood();
-                else if (gridMap[pixel[1]][pixel[0]] === ANT_SPAWN && this.hasFood) {
-                    this.depositFood();
-                    break;
+                if (pixel[0] === this.targetFood[0] && pixel[1] === this.targetFood[1]) {
+                    this.grabTargetFood();
+                    action = true;
                 }
+            }
+
+            if (gridMap[pixel[1]][pixel[0]] === ANT_SPAWN && this.hasFood) {
+                this.depositFood();
+                action = true;
             }
 
             if (this.targetSpawn !== null) {
                 if (pixel[0] === this.targetSpawn[0] && pixel[1] === this.targetSpawn[1]) {
-                    this.depositFood();
-                    this.targetSpawn = null;
+                    this.grabTargetFood();
+                    action = true;
                 }
             }
 
-            ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
+            if (!action) ctx.fillRect(pixel[0], pixel[1], UNIT_WIDTH, UNIT_WIDTH);
         }
 
         if (this.targetFood !== null) {
@@ -420,9 +438,6 @@ class Ant extends Rect {
                             let theta = Math.atan2(y_diff, x_diff);
                             this.heading = theta;
                         }
-                        break;
-                    case ANT_SPAWN:
-                        if (this.hasFood) this.depositFood();
                         break;
                 }
             }
@@ -489,9 +504,11 @@ fetch("./map.json")
     for (let y = 0; y < gridMap.length; y++) {
         homePheromoneMap.push([]);
         foodPheromoneMap.push([]);
+        deadAntMap.push([]);
         for (let x = 0; x < gridMap[y].length; x++) {
             homePheromoneMap[y].push(0);
             foodPheromoneMap[y].push(0);
+            deadAntMap.push([]);
         }
     }
 
@@ -620,20 +637,112 @@ function render() {
 }
 
 function nextSimulationStep() {
-    if (foodAtSpawnCount >= 100) {
+    for (let i = 0; i < foodPheromonesToTrackFromDeadAnts.length; i++) {
+        let pheromone = foodPheromonesToTrackFromDeadAnts[i];
+        if (pheromone.value <= 0) {
+            foodPheromonesToTrackFromDeadAnts.splice(i, 1);
+        }
+        else {
+            let pheromoneX = Math.floor(pheromone.x * UNIT_WIDTH);
+            let pheromoneY = Math.floor(pheromone.y * UNIT_WIDTH);
+            if (gridMap[pheromoneY][pheromoneX] !== GROUND) continue;
+
+            ctx.fillStyle = `rgba(255, 0, 0, ${pheromone.value})`;
+            ctx.fillRect(pheromone.x * UNIT_WIDTH, pheromone.y * UNIT_WIDTH, UNIT_WIDTH, UNIT_WIDTH);
+
+            pheromone.value -= PHEROMONE_EVAPORATE_STRENGTH;
+            foodPheromoneMap[pheromoneY][pheromoneX] -= PHEROMONE_EVAPORATE_STRENGTH;
+            if (foodPheromoneMap[pheromoneY][pheromoneX] <= 0) foodPheromoneMap[pheromoneY][pheromoneX] = 0;
+        }
+    }
+
+    for (let i = 0; i < homePheromonesToTrackFromDeadAnts.length; i++) {
+        let pheromone = homePheromonesToTrackFromDeadAnts[i];
+        if (pheromone.value <= 0) {
+            homePheromonesToTrackFromDeadAnts.splice(i, 1);
+        }
+        else {
+            let pheromoneX = Math.floor(pheromone.x * UNIT_WIDTH);
+            let pheromoneY = Math.floor(pheromone.y * UNIT_WIDTH);
+            if (gridMap[pheromoneY][pheromoneX] !== GROUND) continue;
+
+            ctx.fillStyle = `rgba(0, 0, 255, ${pheromone.value})`;
+            ctx.fillRect(pheromone.x * UNIT_WIDTH, pheromone.y * UNIT_WIDTH, UNIT_WIDTH, UNIT_WIDTH);
+
+            pheromone.value -= PHEROMONE_EVAPORATE_STRENGTH;
+            homePheromoneMap[pheromoneY][pheromoneX] -= PHEROMONE_EVAPORATE_STRENGTH;
+            if (homePheromoneMap[pheromoneY][pheromoneX] <= 0) homePheromoneMap[pheromoneY][pheromoneX] = 0;
+        }
+    }
+
+    for (let i = 0; i < deadPheromones.length; i++) {
+        let pheromone = deadPheromones[i];
+        if (pheromone.value <= 0) {
+            deadPheromones.splice(i, 1);
+        }
+        else {
+            let pheromoneX = Math.floor(pheromone.x * UNIT_WIDTH);
+            let pheromoneY = Math.floor(pheromone.y * UNIT_WIDTH);
+            if (gridMap[pheromoneY][pheromoneX] !== GROUND) continue;
+
+            ctx.fillStyle = `rgba(128, 0, 128, ${pheromone.value})`;
+            ctx.fillRect(pheromone.x * UNIT_WIDTH, pheromone.y * UNIT_WIDTH, UNIT_WIDTH, UNIT_WIDTH);
+
+            pheromone.value -= PHEROMONE_EVAPORATE_STRENGTH;
+            deadAntMap[pheromoneY][pheromoneX] -= PHEROMONE_EVAPORATE_STRENGTH;
+            if (deadAntMap[pheromoneY][pheromoneX] <= 0) deadAntMap[pheromoneY][pheromoneX] = 0;
+        }
+    }
+
+    if (foodAtSpawnCount >= FOOD_TO_CREATE_ANT) {
         let index = Math.floor(Math.random() * spawnPixels.length);
         let ant = new Ant(spawnPixels[index][0] * UNIT_WIDTH, spawnPixels[index][1] * UNIT_WIDTH, 2.5, 7.5, Math.random() * 2 * Math.PI, ANT_SPEED);
         
         ants.push(ant);
 
-        foodAtSpawnCount -= 100;
+        foodAtSpawnCount -= FOOD_TO_CREATE_ANT;
     }
 
-    let limit = ants.length;
-    for (let i = 0; i < limit; i++) {
+    for (let i = 0; i < ants.length; i++) {
         let ant = ants[i];
         ant.dropPheromone();
         ant.move();
+        
+        if (ant.hasFood) {
+            if (ant.targetSpawn === null) {
+                for (const pixel of pixelateChild(ant.spawnCollider)) {
+                    try {
+                        if (gridMap[pixel[1]][pixel[0]] === ANT_SPAWN) {
+                            ant.rotateToPoint(pixel);
+                            ant.targetSpawn = pixel;
+                            break;
+                        }
+                    }
+                    catch {}
+                }
+            }
+        }
+        let kill = ant.getTimeFromPoint();
+        if (kill) {
+            ants.splice(i, 1);
+            i--;
+
+            for (const homePheromone of ant.homePheromones) {
+                homePheromonesToTrackFromDeadAnts.push(homePheromone);
+            }
+
+            for (const foodPheromone of ant.foodPheromones) {
+                foodPheromonesToTrackFromDeadAnts.push(foodPheromone);
+            }
+
+            for (const pixel of pixelate(ant)) {
+                let pheromone = new Pheromone(pixel[0], pixel[1], DEAD);
+                deadAntMap[pixel[1]][pixel[0]] = pheromone;
+                deadPheromones.push(pheromone);
+            }
+
+            continue;
+        }
 
         let samples = ant.sense(ant.targetPheromoneType);
         if ((samples.forward > samples.left) && (samples.forward > samples.right)) {
@@ -653,27 +762,23 @@ function nextSimulationStep() {
             // face forward
             continue;
         }
-        
-        if (ant.hasFood) {
-            if (ant.targetSpawn === null) {
-                for (const pixel of pixelateChild(ant.spawnCollider)) {
-                    try {
-                        if (gridMap[pixel[1]][pixel[0]] === ANT_SPAWN) {
-                            ant.rotateToPoint(pixel);
-                            ant.targetSpawn = pixel;
-                            break;
-                        }
-                    }
-                    catch {}
-                }
-            }
+
+        if ((samples.deadForward > samples.deadLeft) && (samples.deadForward > samples.deadRight)) {
+            ant.heading += Math.PI;
         }
-        if (typeof ant === Ant) {
-            let kill = ant.getTimeFromPoint();
-            if (kill) {
-                ants.splice(i, 1);
-                i--;
-            }
+        else if ((samples.deadForward < samples.deadLeft) && (samples.deadLeft < samples.deadRight)) {
+            // turn randomly, which is taken care by .move()
+            ant.heading += Math.PI;
+        }
+        else if (samples.deadLeft < samples.deadRight) {
+            ant.heading -= TURN_FORCE;
+        }
+        else if (samples.deadRight < samples.deadLeft) {
+            ant.heading += TURN_FORCE;
+        }
+        else {
+            // face forward
+            continue;
         }
     }
 }
