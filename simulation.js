@@ -1,4 +1,4 @@
-export default function whatever() {
+export default function whatever(state) {
 
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -28,6 +28,8 @@ const FOOD_PHEROMONE = 1;
 
 const PHEROMONE_EVAPORATE_STRENGTH = 0.005;
 
+const ANT_TIMER_SECONDS = 60; // seconds
+
 let ANT_SPAWN_COORD = [];
 
 let foodAtSpawnCount = 0;
@@ -43,6 +45,19 @@ let foodPheromoneMap = [];
 let foodPixels = [];
 let wallPixels = [];
 let spawnPixels = [];
+
+class CONTROLLER {
+    constructor(state) {
+        this.state = state;
+    }
+
+    toggle() {
+        this.state = !this.state;
+        if (this.state) setTimeout(loop, 1000 / FPS);
+    }
+}
+
+const CONTROL_OBJECT = new CONTROLLER(state);
 
 function round(x, multiple) {
     if (x / multiple - Math.floor(x / multiple) < 0.5) return Math.floor(x / multiple) * multiple;
@@ -153,6 +168,8 @@ class Ant extends Rect {
 
         this.targetSpawn = [];
 
+        this.timer = 0;
+
         let rectCenterX = this.x + this.width / 2;
         let rectCenterY = this.y + this.height / 2;
 
@@ -162,7 +179,7 @@ class Ant extends Rect {
         this.sensorRight = new Rect(rectCenterX + 3 * unit, rectCenterY - 3 * unit, 3 * unit, 3 * unit);
         this.sensorLeft = new Rect(rectCenterX - 5 * unit, rectCenterY - 3 * unit, 3 * unit, 3 * unit);
         this.sensorForward = new Rect(rectCenterX - unit, rectCenterY - 5 * unit, 3 * unit, 3 * unit); // pos: (-1, -5) width: 3 height: 3
-        this.collisionDetecter = new Rect(rectCenterX - unit, rectCenterY - 3 * unit, 3 * unit, 2 * unit);
+        this.collisionDetecter = new Rect(rectCenterX - 3 * unit, rectCenterY - 7 * unit, 7 * unit, 6 * unit);
         this.spawnCollider = new Rect(rectCenterX - 3 * unit, rectCenterY - 3 * unit, 9 * unit, 9 * unit);
 
         this.foodGrabberNonRotate = structuredClone(this.foodGrabber);
@@ -175,6 +192,18 @@ class Ant extends Rect {
         // make sure the order of both is the exact same
         this.children.push(this.foodGrabber, this.sensorRight, this.sensorLeft, this.sensorForward, this.collisionDetecter, this.spawnCollider);
         this.nonRotatedChildren.push(this.foodGrabberNonRotate, this.sensorRightNonRotate, this.sensorLeftNonRotate, this.sensorForwardNonRotate, this.collisionDetecterNonRotate, this.spawnColliderNonRotate);
+    }
+
+    get timePassed() {
+        return new Date().getTime() - this.time;
+    }
+
+    getTimeFromPoint() {
+        return this.timePassed >= ANT_TIMER_SECONDS * 1000;
+    }
+
+    reset() {
+        this.time = new Date().getTime();
     }
 
     sense(type) {
@@ -259,6 +288,7 @@ class Ant extends Rect {
 
     grabTargetFood() {
         this.hasFood = true;
+        this.reset();
         gridMap[this.targetFood[1]][this.targetFood[0]] = GROUND;
         for (let i = 0; i < foodPixels.length; i++) {
             if (foodPixels[i][0] === this.targetFood[0] && foodPixels[i][1] === this.targetFood[1]) {
@@ -276,6 +306,7 @@ class Ant extends Rect {
 
     depositFood() {
         if (!this.hasFood) return;
+        this.reset();
         foodAtSpawnCount++;
         this.setDropPheromoneType(HOME_PHEROMONE);
         this.setTargetPheromoneType(FOOD_PHEROMONE);
@@ -360,6 +391,7 @@ class Ant extends Rect {
                 if (dist <= 5) this.grabTargetFood();
             }
         }
+
         ctx.fillStyle = 'white';
         for (const pixel of pixelateChild(this.collisionDetecter)) {
             let pixelXFloored = Math.floor(pixel[0] / UNIT_WIDTH);
@@ -463,7 +495,7 @@ fetch("./map.json")
         }
     }
 
-    init();
+    if (CONTROL_OBJECT.state) init();
 })
 
 function init() {
@@ -495,7 +527,6 @@ function locateRender() {
                     wallPixels.push([x, y]);
                     break;
                 case ANT_SPAWN:
-                    console.log('yo')
                     // gridMap[y][x] = GROUND;
                     // x += 100 * Math.cos(-Math.PI / 6);
                     // y += 100 * Math.sin(-Math.PI / 6);
@@ -589,7 +620,18 @@ function render() {
 }
 
 function nextSimulationStep() {
-    for (const ant of ants) {
+    if (foodAtSpawnCount >= 100) {
+        let index = Math.floor(Math.random() * spawnPixels.length);
+        let ant = new Ant(spawnPixels[index][0] * UNIT_WIDTH, spawnPixels[index][1] * UNIT_WIDTH, 2.5, 7.5, Math.random() * 2 * Math.PI, ANT_SPEED);
+        
+        ants.push(ant);
+
+        foodAtSpawnCount -= 100;
+    }
+
+    let limit = ants.length;
+    for (let i = 0; i < limit; i++) {
+        let ant = ants[i];
         ant.dropPheromone();
         ant.move();
 
@@ -626,14 +668,24 @@ function nextSimulationStep() {
                 }
             }
         }
+        if (typeof ant === Ant) {
+            let kill = ant.getTimeFromPoint();
+            if (kill) {
+                ants.splice(i, 1);
+                i--;
+            }
+        }
     }
 }
 
 function loop() {
+    if (!CONTROL_OBJECT.state) return;
+
     render();
     nextSimulationStep();
 
     setTimeout(loop, 1000 / FPS);
 }
 
+return CONTROL_OBJECT;
 }
