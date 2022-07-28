@@ -19,9 +19,10 @@ const FOOD_COLOR = 'green';
 const GROUND_COLOR = 'black';
 
 const NUM_ANTS = 500;
+let currAntNum = NUM_ANTS;
 const ANT_STEER_STRENGTH_RANGE = 0.15;
-const TURN_FORCE = 0.15;
-const ANT_SPEED = 2 * UNIT_WIDTH;
+const TURN_FORCE = 0.5;
+const ANT_SPEED = 3 * UNIT_WIDTH;
 
 const HOME_PHEROMONE = 0;
 const FOOD_PHEROMONE = 1;
@@ -30,7 +31,7 @@ const DEAD = 2;
 const PHEROMONE_EVAPORATE_STRENGTH = 0.005;
 
 const ANT_TIMER_SECONDS = 60; // seconds
-const FOOD_TO_CREATE_ANT = 10;
+const FOOD_TO_CREATE_ANT = 5;
 
 let ANT_SPAWN_COORD = [];
 
@@ -443,7 +444,7 @@ class Ant extends Rect {
             }
             else {
                 if (this.changeDirection === null) this.changeDirection = Math.random() * 2 - 1 >= 0 ? 1 : -1;
-                this.heading += this.changeDirection * Math.PI / 6;
+                this.heading += this.changeDirection * 2 * TURN_FORCE;
                 break;
             }
         }
@@ -695,12 +696,15 @@ function nextSimulationStep() {
     }
 
     if (foodAtSpawnCount >= FOOD_TO_CREATE_ANT) {
-        let index = Math.floor(Math.random() * spawnPixels.length);
-        let ant = new Ant(spawnPixels[index][0] * UNIT_WIDTH, spawnPixels[index][1] * UNIT_WIDTH, 2.5, 7.5, Math.random() * 2 * Math.PI, ANT_SPEED);
-        
-        ants.push(ant);
+        while (foodAtSpawnCount >= FOOD_TO_CREATE_ANT) {
+            let index = Math.floor(Math.random() * spawnPixels.length);
+            let ant = new Ant(spawnPixels[index][0] * UNIT_WIDTH, spawnPixels[index][1] * UNIT_WIDTH, 2.5, 7.5, Math.random() * 2 * Math.PI, ANT_SPEED);
+            
+            ants.push(ant);
+            currAntNum++;
 
-        foodAtSpawnCount -= FOOD_TO_CREATE_ANT;
+            foodAtSpawnCount -= FOOD_TO_CREATE_ANT;
+        }
     }
 
     for (let i = 0; i < ants.length; i++) {
@@ -725,6 +729,7 @@ function nextSimulationStep() {
         let kill = ant.getTimeFromPoint();
         if (kill) {
             ants.splice(i, 1);
+            currAntNum--;
             i--;
 
             for (const homePheromone of ant.homePheromones) {
@@ -788,6 +793,8 @@ function loop() {
 
     render();
     nextSimulationStep();
+
+    document.title = `${currAntNum} ants`
 
     setTimeout(loop, 1000 / FPS);
 }
